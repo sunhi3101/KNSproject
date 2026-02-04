@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Salt Energy Smart Control</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #f8fafc; display: flex; justify-content: center; padding: 20px; }
+        .container { background: #1e293b; padding: 25px; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); width: 450px; }
+        h2 { text-align: center; color: #38bdf8; margin-bottom: 20px; }
+        .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px; }
+        .box { background: #334155; padding: 15px; border-radius: 12px; text-align: center; }
+        .label { font-size: 12px; color: #94a3b8; display: block; margin-bottom: 5px; }
+        .big-val { font-size: 20px; font-weight: bold; font-family: monospace; }
+        
+        /* Progress Bars */
+        .bar-bg { background: #1e293b; height: 10px; border-radius: 5px; margin-top: 10px; overflow: hidden; }
+        .bar-fill { height: 100%; width: 0%; transition: 0.5s; }
+        
+        /* Controls */
+        .btn { width: 100%; padding: 12px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; margin-top: 10px; transition: 0.3s; }
+        #connect-btn { background: #38bdf8; color: #0f172a; }
+        .switch-group { display: flex; gap: 10px; margin-top: 20px; }
+        .on-btn { background: #22c55e; color: white; flex: 1; }
+        .off-btn { background: #ef4444; color: white; flex: 1; }
+        .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>⚡ NĂNG LƯỢNG MUỐI</h2>
+    
+    <div class="grid">
+        <div class="box">
+            <span class="label">ĐIỆN ÁP</span>
+            <span class="big-val" id="v-val">0.00</span> V
+        </div>
+        <div class="box">
+            <span class="label">CÔNG SUẤT</span>
+            <span class="big-val" id="p-val">0.0</span> mW
+        </div>
+    </div>
+
+    <div class="box" style="margin-bottom: 20px;">
+        <span class="label">MỰC NƯỚC MUỐI</span>
+        <span class="big-val" id="w-text">0%</span>
+        <div class="bar-bg">
+            <div id="w-bar" class="bar-fill" style="background: #38bdf8;"></div>
+        </div>
+    </div>
+
+    <div class="box">
+        <span class="label">CƯỜNG ĐỘ DÒNG ĐIỆN</span>
+        <span class="big-val" id="i-val">0.00</span> mA
+        <div class="bar-bg">
+            <div id="i-bar" class="bar-fill" style="background: #fbbf24;"></div>
+        </div>
+    </div>
+
+    <button id="connect-btn" class="btn">KẾT NỐI HỆ THỐNG</button>
+
+    <div class="switch-group">
+        <button id="on-btn" class="btn on-btn" disabled>BẬT NGUỒN</button>
+        <button id="off-btn" class="btn off-btn" disabled>NGẮT NGUỒN</button>
+    </div>
+</div>
+
+<script>
+    let port, writer;
+    const connectBtn = document.getElementById('connect-btn');const onBtn = document.getElementById('on-btn');
+    const offBtn = document.getElementById('off-btn');
+
+    connectBtn.addEventListener('click', async () => {
+        port = await navigator.serial.requestPort();
+        await port.open({ baudRate: 9600 });
+        
+        // Thiết lập luồng gửi dữ liệu (Arduino nhận lệnh)
+        writer = port.writable.getWriter();
+        
+        // Kích hoạt các nút điều khiển
+        onBtn.disabled = false;
+        offBtn.disabled = false;
+        connectBtn.innerText = "ĐANG HOẠT ĐỘNG";
+        connectBtn.style.background = "#1e293b";
+        connectBtn.style.color = "#38bdf8";
+
+        // Thiết lập luồng đọc dữ liệu
+        const decoder = new TextDecoderStream();
+        port.readable.pipeTo(decoder.writable);
+        const reader = decoder.readable.getReader();
+
+        while (true) {
+            const { value, done } = await reader.read();
+            if (done) break;
+            
+            const parts = value.split(',');
+            if(parts.length >= 3) {
+                updateUI(parseFloat(parts[0]), parseFloat(parts[1]), parseFloat(parts[2]));
+            }
+        }
+    });
+
+    // Gửi lệnh xuống Arduino
+    onBtn.onclick = () => writer.write(new TextEncoder().encode("1"));
+    offBtn.onclick = () => writer.write(new TextEncoder().encode("0"));
+
+    function updateUI(v, i, w) {
+        document.getElementById('v-val').innerText = v.toFixed(2);
+        document.getElementById('i-val').innerText = i.toFixed(2);
+        document.getElementById('p-val').innerText = (v * i).toFixed(1);
+        document.getElementById('w-text').innerText = Math.round(w) + "%";
+        
+        document.getElementById('w-bar').style.width = w + "%";
+        document.getElementById('i-bar').style.width = Math.min((i/100)*100, 100) + "%";
+    }
+</script>
+</body>
+</html>
