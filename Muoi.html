@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <title>Salt Energy Monitor - Pro</title>
+    <style>
+        body { font-family: 'Segoe UI', sans-serif; background: #0f172a; color: #f8fafc; display: flex; justify-content: center; padding: 20px; }
+        .container { background: #1e293b; padding: 25px; border-radius: 20px; box-shadow: 0 20px 50px rgba(0,0,0,0.5); width: 400px; }
+        h2 { text-align: center; color: #38bdf8; margin-bottom: 25px; text-transform: uppercase; letter-spacing: 1px; }
+        
+        .stats-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 15px; }
+        .box { background: #334155; padding: 15px; border-radius: 12px; text-align: center; border: 1px solid #475569; }
+        .full-box { grid-column: span 2; }
+        
+        .label { font-size: 11px; color: #94a3b8; display: block; margin-bottom: 5px; font-weight: bold; }
+        .big-val { font-size: 26px; font-weight: bold; font-family: monospace; color: #ffffff; }
+        .unit { color: #38bdf8; font-size: 14px; margin-left: 4px; }
+        
+        .bar-bg { background: #1e293b; height: 10px; border-radius: 5px; margin-top: 10px; overflow: hidden; }
+        .bar-fill { height: 100%; width: 0%; transition: 0.5s; background: #22c55e; }
+        
+        .btn { width: 100%; padding: 14px; border: none; border-radius: 10px; cursor: pointer; font-weight: bold; margin-top: 10px; transition: 0.3s; }
+        #connect-btn { background: #38bdf8; color: #0f172a; margin-bottom: 10px; }
+        .switch-group { display: flex; gap: 10px; }
+        .on-btn { background: #22c55e; color: white; flex: 1; }
+        .off-btn { background: #ef4444; color: white; flex: 1; }
+        .btn:active { transform: scale(0.98); }
+        .btn:disabled { opacity: 0.3; cursor: not-allowed; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>⚡ NĂNG LƯỢNG MUỐI</h2>
+    
+    <div class="stats-grid">
+        <div class="box">
+            <span class="label">ĐIỆN ÁP</span>
+            <span class="big-val" id="v-val">0.00</span><span class="unit">V</span>
+        </div>
+        
+        <div class="box">
+            <span class="label">DÒNG ĐIỆN</span>
+            <span class="big-val" id="i-val">0.0</span><span class="unit">mA</span>
+        </div>
+
+        <div class="box full-box">
+            <span class="label">NỒNG ĐỘ MUỐI (EC)</span>
+            <span class="big-val" id="s-text">0</span><span class="unit">%</span>
+            <div class="bar-bg">
+                <div id="s-bar" class="bar-fill"></div>
+            </div>
+        </div>
+    </div>
+
+    <button id="connect-btn" class="btn">KẾT NỐI HỆ THỐNG</button>
+
+    <div class="switch-group">
+        <button id="on-btn" class="btn on-btn" disabled>BẬT NGUỒN</button>
+        <button id="off-btn" class="btn off-btn" disabled>NGẮT NGUỒN</button>
+    </div>
+</div>
+
+<script>
+    let port, writer;
+const connectBtn = document.getElementById('connect-btn');
+    const onBtn = document.getElementById('on-btn');
+    const offBtn = document.getElementById('off-btn');
+
+    connectBtn.addEventListener('click', async () => {
+        try {
+            port = await navigator.serial.requestPort();
+            await port.open({ baudRate: 9600 });
+            
+            writer = port.writable.getWriter();
+            onBtn.disabled = false;
+            offBtn.disabled = false;
+            connectBtn.innerText = "ĐANG GIÁM SÁT...";
+            connectBtn.style.background = "#334155";
+            connectBtn.style.color = "#38bdf8";
+
+            const decoder = new TextDecoderStream();
+            port.readable.pipeTo(decoder.writable);
+            const reader = decoder.readable.getReader();
+
+            while (true) {
+                const { value, done } = await reader.read();
+                if (done) break;
+                
+                const parts = value.split(',');
+                if(parts.length >= 3) {
+                    updateUI(parseFloat(parts[0]), parseFloat(parts[1]), parseFloat(parts[2]));
+                }
+            }
+        } catch (e) { alert("Kết nối Serial thất bại!"); }
+    });
+
+    onBtn.onclick = () => writer.write(new TextEncoder().encode("1"));
+    offBtn.onclick = () => writer.write(new TextEncoder().encode("0"));
+
+    function updateUI(v, i, s) {
+        document.getElementById('v-val').innerText = v.toFixed(2);
+        document.getElementById('i-val').innerText = i.toFixed(1);
+        document.getElementById('s-text').innerText = Math.round(s);
+        
+        // Cập nhật thanh nồng độ muối
+        const sBar = document.getElementById('s-bar');
+        sBar.style.width = s + "%";
+        sBar.style.background = s < 20 ? "#ef4444" : "#22c55e"; // Đỏ nếu dưới 20%
+    }
+</script>
+</body>
+</html>
